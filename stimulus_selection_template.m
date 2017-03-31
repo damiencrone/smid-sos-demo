@@ -1,15 +1,17 @@
 % Example stimulus selection script for use with the Socio-Moral Image
-% Database
+% Database (SMID)
 %   This script uses the SOS toolbox to draw sample(s) meeting a specific
 %   set of criteria.
 %
 % Modfied:
-%   February 2017 (Damien Crone)
+%   March 2017 (Damien Crone)
 % Requires:
 %   The following toolboxes:
 %       - SOS - see references below
 %   The following files and folders:
-%       - stim_data.csv - a .csv file containing SMID normative data
+%       - SMID_norms.csv - a .csv file containing SMID normative data
+%       - SMID_img_properties.csv - a .csv file containing SMID image
+%         proprty information
 %       - a folder containing all stimuli
 % For further information, see:
 %   - The SOS toolbox overview paper:
@@ -21,17 +23,26 @@
 %       http://sos.cnbc.cmu.edu/commands.html
 %   - The SMID OSF page:
 %       https://osf.io/2rqad/
+%
+% This script was written and tested using MATLAB 2014b.
 
 
 %% Preliminaries
-clear all; clc;
+clear all;
+close all;
+clc;
 
 
 %% Specify paths
 
-DIRS.stim_data = 'sos_data_unformatted.csv'; % Raw data
+DIRS.stim_norms = 'SMID_norms.csv';
+DIRS.stim_img_properties = 'SMID_img_properties.csv';
 DIRS.stim = 'img/'; % Folder to retrieve images from
 DIRS.out = ['output_', datestr(now, 'yyyy-mm-dd'), '/'];
+
+% Make output directory and open log file
+mkdir(char(DIRS.out));
+diary([DIRS.out 'log.txt'])
 
 
 %% Enter POPULATION specifications here
@@ -43,7 +54,7 @@ hwr_max = 0.8; % Highest allowable HWR
 
 % List any images to be excluded a priori
 imgs_to_exclude = {...
-    'b2_p17_2.jpg', ... contains famous people
+    'b15_p385_17', ... image has multiple panels
     };
 % Note that the this script should still execute properly if this cell
 % array is empty
@@ -57,29 +68,44 @@ set_size = 30;
 % Maximium number of iterations for SOS
 max_it = 2e6;
 
+% Specify whether to exclude plots for specific variables
+suppress_rating_freq_plots = true;
+
 
 %% Load raw data and exclude images that are a priori ineligible
 
 % Load raw data
-T = readtable(DIRS.stim_data);
+SMID_NORMS = readtable(DIRS.stim_norms, 'ReadRowNames', true);
+SMID_PROP = readtable(DIRS.stim_img_properties, 'ReadRowNames', true);
 % Note that this table should only contain numeric variables (aside from
 % the image IDs, which are assumed to be in the first column)
 
-% Remove images with height to width ratios outside boundaries
-excl = T.im_height_width_ratio < hwr_min | T.im_height_width_ratio > hwr_max;
-T(excl, :) = [];
+% Ensure tables are identically ordered
+SMID_PROP = SMID_PROP(SMID_NORMS.Properties.RowNames, :);
+
+% Merge tables
+SMID = [SMID_NORMS.Properties.RowNames, SMID_NORMS, SMID_PROP];
+SMID.Properties.VariableNames(1) = {'img'};
 
 % Loop through and exclude specified images
+n_before_apriori_exclusions = height(SMID);
 for i = 1:length(imgs_to_exclude);
     str = imgs_to_exclude{i};
-    excl = strcmpi(str, T.img);
-    T(excl, :) = [];
+    excl = strcmpi(str, SMID.img);
+    SMID(excl, :) = [];
 end
+disp(['Images excluded a priori = ', num2str(n_before_apriori_exclusions - height(SMID))]);
+
+% Remove images with height to width ratios outside boundaries
+excl = SMID.img_prop_height_width_ratio < hwr_min | ...
+    SMID.img_prop_height_width_ratio > hwr_max;
+SMID(excl, :) = [];
+disp(['Images excluded based on HWR = ', num2str(sum(excl))]);
 
 
 %% Save raw stimulus data as SOS-compatible text file
 
-col_names = T.Properties.VariableNames;
+col_names = SMID.Properties.VariableNames;
 col_names{1} = [col_names{1}, '|s']; % Code as SOS string variable
 
 for i = 2:length(col_names);
@@ -87,7 +113,7 @@ for i = 2:length(col_names);
 end
 
 % Convert data to cell array
-C = table2cell(T);
+C = table2cell(SMID);
 
 % Initialise file
 fileID = fopen('sos_data.txt', 'w') ;
@@ -162,8 +188,8 @@ MoralSOS.initFillSamples();
 %   (2) Soft constraints (defined in SOFT_MATCH_1) that try and match
 %   values in a given sample, on a given variable to a specific target. The
 %   first row, for example, can be read as follows:
-%       
-%       In the 'moral' sample, select images so that the 'moral_all_avg'
+%
+%       In the 'moral' sample, select images so that the 'moral_mean'
 %       'mean' will equal 5
 %
 %   (3) Soft constraints (defined in SOFT_MATCH_2) that try and match two
@@ -188,12 +214,12 @@ MoralSOS.initFillSamples();
 % specific variables
 HARD_BOUND = cell2table({...
     
-      'moral', 'moral_all_avg',   'floor',       3.5;
-    'immoral', 'moral_all_avg', 'ceiling',       2.5;
+'moral', 'moral_mean',   'floor',       3.5;
+'immoral', 'moral_mean', 'ceiling',       2.5;
 
 }, 'VariableNames', { ...
 
-     'sample',       'varname',     'fnc', 'value'
+'sample',    'varname',     'fnc', 'value'
 
 });
 
@@ -201,29 +227,29 @@ HARD_BOUND = cell2table({...
 % values
 SOFT_MATCH_1 = cell2table({...
     
-      'moral', 'moral_all_avg', 'mean',        5,        2,    5;
-    'immoral', 'moral_all_avg', 'mean',        1,        2,    5;
-      'moral',  'moral_all_sd', 'mean',        0,        1,    2;
-    'immoral',  'moral_all_sd', 'mean',        0,        1,    2;
+'moral', 'moral_mean', 'mean',        5,        2,    5;
+'immoral', 'moral_mean', 'mean',        1,        2,    5;
+'moral',   'moral_sd', 'mean',        0,        1,    2;
+'immoral',   'moral_sd', 'mean',        0,        1,    2;
 
 }, 'VariableNames', { ...
 
-     'sample',       'varname', 'stat', 'target', 'weight', 'exp'
+'sample',    'varname', 'stat', 'target', 'weight', 'exp'
 
 });
 
 % (3) Define soft constraints to match variables to across samples
 SOFT_MATCH_2 = cell2table({...
     
-      'moral', 'immoral',      'harm_all_avg',      'harm_all_avg', 'mean',        2,    5;
-      'moral', 'immoral',  'fairness_all_avg',  'fairness_all_avg', 'mean',        2,    5;
-      'moral', 'immoral',   'ingroup_all_avg',   'ingroup_all_avg', 'mean',        2,    5;
-      'moral', 'immoral', 'authority_all_avg', 'authority_all_avg', 'mean',        2,    5;
-      'moral', 'immoral',    'purity_all_avg',    'purity_all_avg', 'mean',        2,    5;
+'moral', 'immoral',      'harm_mean',      'harm_mean', 'mean',        2,    5;
+'moral', 'immoral',  'fairness_mean',  'fairness_mean', 'mean',        2,    5;
+'moral', 'immoral',   'ingroup_mean',   'ingroup_mean', 'mean',        2,    5;
+'moral', 'immoral', 'authority_mean', 'authority_mean', 'mean',        2,    5;
+'moral', 'immoral',    'purity_mean',    'purity_mean', 'mean',        2,    5;
 
 }, 'VariableNames', { ...
 
-    'sample1', 'sample2',          'varname1',          'varname2', 'stat', 'weight', 'exp'
+'sample1', 'sample2',       'varname1',       'varname2', 'stat', 'weight', 'exp'
 
 });
 
@@ -232,21 +258,21 @@ SOFT_MATCH_2 = cell2table({...
 % solution where each of these variables are uniformly distributed)
 SOFT_DIST = cell2table({...
     
-      'moral',      'harm_all_avg',        1,    2;
-    'immoral',      'harm_all_avg',        1,    2;
-      'moral',  'fairness_all_avg',        1,    2;
-    'immoral',  'fairness_all_avg',        1,    2;
-      'moral',   'ingroup_all_avg',        1,    2;
-    'immoral',   'ingroup_all_avg',        1,    2;
-      'moral', 'authority_all_avg',        1,    2;
-    'immoral', 'authority_all_avg',        1,    2;
-      'moral',    'purity_all_avg',        1,    2;
-    'immoral',    'purity_all_avg',        1,    2;
-    
+'moral',      'harm_mean',        1,    2;
+'immoral',      'harm_mean',        1,    2;
+'moral',  'fairness_mean',        1,    2;
+'immoral',  'fairness_mean',        1,    2;
+'moral',   'ingroup_mean',        1,    2;
+'immoral',   'ingroup_mean',        1,    2;
+'moral', 'authority_mean',        1,    2;
+'immoral', 'authority_mean',        1,    2;
+'moral',    'purity_mean',        1,    2;
+'immoral',    'purity_mean',        1,    2;
+
 }, 'VariableNames', { ...
 
-     'sample',           'varname', 'weight', 'exp'
-    
+'sample',        'varname', 'weight', 'exp'
+
 });
 
 
@@ -317,7 +343,7 @@ for i = 1:height(SOFT_DIST)
     % Construct constraint name
     constr_name = ['soft_', char(SOFT_DIST.sample(i)), '_', char(SOFT_DIST.varname(i)), '_uniform_dist'];
     
-
+    
     MoralSOS.addConstraint(...
         ... Required options
         'sosObj', MoralSOS, 'name', constr_name, ... Object and constraint names
@@ -343,9 +369,6 @@ MoralSOS.optimize();
 
 %% Handle output
 
-% Write data to text file
-mkdir(char(DIRS.out));
-
 % Loop through i samples
 for i = 1:length(sample_names);
     
@@ -363,8 +386,9 @@ for i = 1:length(sample_names);
     for j = 1:length(sample_imgs);
         
         img_j = sample_imgs(j);
+        img_fn = dir(char(strcat(DIRS.stim, img_j, '.*')));
         
-        copyfile(char(strcat(DIRS.stim, '/', img_j)), ...
+        copyfile(char(strcat(DIRS.stim, img_fn.name)), ...
             char(strcat(DIRS.out, ind, '/')))
         
     end
@@ -372,4 +396,82 @@ for i = 1:length(sample_names);
 end
 
 % Save workspace
-save([char(DIRS.out), 'workspace.mat'])
+save([char(DIRS.out), 'workspace.mat']);
+
+diary off;
+
+
+%% Plot distributions for all variables
+
+% Create plot output directories
+mkdir(char(strcat(DIRS.out, 'plots/fig/')));
+mkdir(char(strcat(DIRS.out, 'plots/jpg/')));
+
+% Generate color matrix for samples
+col_mat = hsv(numel(sample_names));
+
+% Loop through unique variables
+for var_num = 2:size(SMID, 2)
+    
+    % As a default, plot this variable
+    is_var_to_plot = true;
+    
+    % Get variable name
+    current_var = SMID.Properties.VariableNames(var_num);
+    
+    % Determine if variable is to be plotted
+    current_var_char = char(current_var);
+    nchar = numel(current_var_char);
+    
+    if suppress_rating_freq_plots && strcmp(current_var_char((nchar-1):end), '_n')
+        is_var_to_plot = false;
+    end
+    
+    % If plot for variable is not supposed to be suppressed, go ahead and
+    % plot it
+    if is_var_to_plot
+        
+        % Add density plot for entire database
+        [f,xi] = ksdensity(SMID.(char(current_var)));
+        h = plot(xi, f, '--', 'color', [0.5, 0.5, 0.5]);
+        
+        hold all;
+        
+        % Loop through samples
+        for sample_num = 1:numel(sample_names)
+            
+            current_sample = sample_names(sample_num);
+            
+            % Get the first column of data (which contains the stimulus names)
+            samp_stim = S.(char(current_sample)).data{1};
+            
+            % Get variable index
+            var_names = [S.(char(current_sample)).header{:}];
+            var_ind = find(strcmp(current_var, var_names));
+            
+            % Get values for current sample
+            var_values = S.(char(current_sample)).data{var_ind};
+            
+            % Add density plot for current sample
+            ksdensity(var_values);
+            [f,xi] = ksdensity(var_values);
+            h = [h, plot(xi, f, 'color', col_mat(sample_num, :))];
+            
+            hold all;
+            
+        end
+        
+        % Add figure axis labels and legend
+        xlabel(strrep(current_var, '_', ' '));
+        ylabel('Density');
+        legend(h, {'all', sample_names{:}});
+        
+        hold off
+        
+        % Save figure
+        saveas(gcf, char(strcat(DIRS.out, 'plots/fig/', current_var)), 'fig');
+        saveas(gcf, char(strcat(DIRS.out, 'plots/jpg/', current_var)), 'jpg');
+        
+    end
+    
+end

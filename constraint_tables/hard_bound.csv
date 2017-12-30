@@ -1,0 +1,5 @@
+sample,varname,fnc,value
+moral,moral_mean,floor,3.5
+immoral,moral_mean,ceiling,2.5
+neutral,moral_mean,floor,2.5
+neutral,moral_mean,ceiling,3.5

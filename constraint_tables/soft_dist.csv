@@ -1,0 +1,11 @@
+sample,varname,weight,exp
+moral,harm_mean,1,2
+immoral,harm_mean,1,2
+moral,fairness_mean,1,2
+immoral,fairness_mean,1,2
+moral,ingroup_mean,1,2
+immoral,ingroup_mean,1,2
+moral,authority_mean,1,2
+immoral,authority_mean,1,2
+moral,purity_mean,1,2
+immoral,purity_mean,1,2

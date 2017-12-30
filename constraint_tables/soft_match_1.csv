@@ -1,0 +1,7 @@
+sample,varname,stat,target,weight,exp
+moral,moral_mean,mean,5,2,5
+immoral,moral_mean,mean,1,2,5
+neutral,moral_mean,mean,3,2,5
+moral,moral_sd,mean,0,1,2
+immoral,moral_sd,mean,0,1,2
+neutral,moral_sd,mean,0,1,2

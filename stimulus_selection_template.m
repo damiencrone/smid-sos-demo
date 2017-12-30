@@ -4,7 +4,7 @@
 %   set of criteria.
 %
 % Modfied:
-%   March 2017 (Damien Crone)
+%   December 2017 (Damien Crone)
 % Requires:
 %   The following toolboxes:
 %       - SOS - see references below
@@ -105,11 +105,13 @@ disp(['Images excluded based on HWR = ', num2str(sum(excl))]);
 
 %% Save raw stimulus data as SOS-compatible text file
 
+% Code first column as SOS string variable
 col_names = SMID.Properties.VariableNames;
-col_names{1} = [col_names{1}, '|s']; % Code as SOS string variable
+col_names{1} = [col_names{1}, '|s'];
 
+% Code all remaining columns as SOS numeric variable
 for i = 2:length(col_names);
-    col_names{i} = [col_names{i}, '|f']; % Code as SOS numeric variable
+    col_names{i} = [col_names{i}, '|f'];
 end
 
 % Convert data to cell array
@@ -142,12 +144,16 @@ MoralSOS = sos('maxIt', max_it, 'reportInterval', 1000, 'stopFreezeIt', 1000, ..
 
 % Load population
 StimPop = population('sos_data.txt', ...
-    'name','StimulusPopulation','isHeader',true,'isFormatting',true);
+    'name','StimulusPopulation', ...
+    'isHeader',true, ...
+    'isFormatting',true ...
+    );
 
 % Define sample(s) - each element of the structure S corresponds to a
 % different sample, which will produce a different text file output
 S.moral   = sample(set_size, 'name', 'MoralSample');
 S.immoral = sample(set_size, 'name', 'ImmoralSample');
+S.neutral = sample(set_size, 'name', 'NeutralSample');
 
 % Retrieve sample names
 sample_names = fieldnames(S);
@@ -168,7 +174,7 @@ for i = 1:numel(sample_names)
     
 end
 
-% Fill initial samples with random samples
+% Fill initial samples with randomly selected stimuli
 MoralSOS.initFillSamples();
 
 
@@ -205,75 +211,21 @@ MoralSOS.initFillSamples();
 % for example matching correlations between variables within or across
 % samples, minimizing the correlation between variables (e.g., between some
 % moral variable and a potential confound like arousal), and so-on.
-%
-% If using a large number of constraints, it may be easier to create these
-% tables outside of matlab (e.g., in Excel), save them as a .csv file, and
-% then load the table using the readtable() function.
 
 % (1) Define hard ceilings / floors on values for specific samples on
 % specific variables
-HARD_BOUND = cell2table({...
-    
-'moral', 'moral_mean',   'floor',       3.5;
-'immoral', 'moral_mean', 'ceiling',       2.5;
-
-}, 'VariableNames', { ...
-
-'sample',    'varname',     'fnc', 'value'
-
-});
+HARD_BOUND = readtable('constraint_tables/hard_bound.csv', 'ReadVariableNames', true);
 
 % (2) Define soft constraints to match individual variables to target
 % values
-SOFT_MATCH_1 = cell2table({...
-    
-'moral', 'moral_mean', 'mean',        5,        2,    5;
-'immoral', 'moral_mean', 'mean',        1,        2,    5;
-'moral',   'moral_sd', 'mean',        0,        1,    2;
-'immoral',   'moral_sd', 'mean',        0,        1,    2;
-
-}, 'VariableNames', { ...
-
-'sample',    'varname', 'stat', 'target', 'weight', 'exp'
-
-});
+SOFT_MATCH_1 = readtable('constraint_tables/soft_match_1.csv', 'ReadVariableNames', true);
 
 % (3) Define soft constraints to match variables to across samples
-SOFT_MATCH_2 = cell2table({...
-    
-'moral', 'immoral',      'harm_mean',      'harm_mean', 'mean',        2,    5;
-'moral', 'immoral',  'fairness_mean',  'fairness_mean', 'mean',        2,    5;
-'moral', 'immoral',   'ingroup_mean',   'ingroup_mean', 'mean',        2,    5;
-'moral', 'immoral', 'authority_mean', 'authority_mean', 'mean',        2,    5;
-'moral', 'immoral',    'purity_mean',    'purity_mean', 'mean',        2,    5;
-
-}, 'VariableNames', { ...
-
-'sample1', 'sample2',       'varname1',       'varname2', 'stat', 'weight', 'exp'
-
-});
-
+SOFT_MATCH_2 = readtable('constraint_tables/soft_match_2.csv', 'ReadVariableNames', true);
 
 % (4) Define soft distributional constraints (i.e., try to return a
 % solution where each of these variables are uniformly distributed)
-SOFT_DIST = cell2table({...
-    
-'moral',      'harm_mean',        1,    2;
-'immoral',      'harm_mean',        1,    2;
-'moral',  'fairness_mean',        1,    2;
-'immoral',  'fairness_mean',        1,    2;
-'moral',   'ingroup_mean',        1,    2;
-'immoral',   'ingroup_mean',        1,    2;
-'moral', 'authority_mean',        1,    2;
-'immoral', 'authority_mean',        1,    2;
-'moral',    'purity_mean',        1,    2;
-'immoral',    'purity_mean',        1,    2;
-
-}, 'VariableNames', { ...
-
-'sample',        'varname', 'weight', 'exp'
-
-});
+SOFT_DIST = readtable('constraint_tables/soft_dist.csv', 'ReadVariableNames', true);
 
 
 %% Set constraints
@@ -286,7 +238,11 @@ SOFT_DIST = cell2table({...
 for i = 1:height(HARD_BOUND)
     
     % Construct constraint name
-    constr_name = ['hard_', char(HARD_BOUND.sample(i)), '_set_', char(HARD_BOUND.varname(i)), '_', char(SOFT_MATCH_1.stat(i)), '_to_', num2str(SOFT_MATCH_1.target(i))];
+    constr_name = [ ...
+        'hard_', char(HARD_BOUND.sample(i)), ...
+        '_set_', char(HARD_BOUND.varname(i)), '_', char(SOFT_MATCH_1.stat(i)), ...
+        '_to_', num2str(SOFT_MATCH_1.target(i)) ...
+        ];
     
     MoralSOS.addConstraint(...
         'sosObj', MoralSOS, 'name', constr_name, ... Object and constraint names
@@ -302,7 +258,11 @@ end
 for i = 1:height(SOFT_MATCH_1)
     
     % Construct constraint name
-    constr_name = ['soft_', char(SOFT_MATCH_1.sample(i)), '_set_', char(SOFT_MATCH_1.varname(i)), '_', char(SOFT_MATCH_1.stat(i)), '_to_', num2str(SOFT_MATCH_1.target(i))];
+    constr_name = [ ...
+        'soft_', char(SOFT_MATCH_1.sample(i)), ...
+        '_set_', char(SOFT_MATCH_1.varname(i)), '_', char(SOFT_MATCH_1.stat(i)), ... 
+        '_to_', num2str(SOFT_MATCH_1.target(i)) ...
+        ];
     
     MoralSOS.addConstraint(...
         ... Required options
@@ -321,7 +281,11 @@ end
 for i = 1:height(SOFT_MATCH_2)
     
     % Construct constraint name
-    constr_name = ['soft_match_', char(SOFT_MATCH_2.sample1(i)), '_', char(SOFT_MATCH_2.varname1(i)), '_', char(SOFT_MATCH_2.sample2(i)), '_', char(SOFT_MATCH_2.varname2(i)), '_', char(SOFT_MATCH_2.stat(i)),];
+    constr_name = [ ...
+        'soft_match_', char(SOFT_MATCH_2.sample1(i)), '_', char(SOFT_MATCH_2.varname1(i)), ...
+        '_to_', char(SOFT_MATCH_2.sample2(i)), '_', char(SOFT_MATCH_2.varname2(i)), ...
+        '_on_', char(SOFT_MATCH_2.stat(i)) ...
+        ];
     
     MoralSOS.addConstraint(...
         ... Required options
@@ -341,7 +305,10 @@ end
 for i = 1:height(SOFT_DIST)
     
     % Construct constraint name
-    constr_name = ['soft_', char(SOFT_DIST.sample(i)), '_', char(SOFT_DIST.varname(i)), '_uniform_dist'];
+    constr_name = [ ...
+        'soft_', char(SOFT_DIST.sample(i)), '_', char(SOFT_DIST.varname(i)), ...
+        '_uniform_dist' ...
+        ];
     
     
     MoralSOS.addConstraint(...
@@ -422,8 +389,9 @@ for var_num = 2:size(SMID, 2)
     % Determine if variable is to be plotted
     current_var_char = char(current_var);
     nchar = numel(current_var_char);
+    is_rating_freq = strcmp(current_var_char((nchar-1):end), '_n');
     
-    if suppress_rating_freq_plots && strcmp(current_var_char((nchar-1):end), '_n')
+    if suppress_rating_freq_plots && is_rating_freq
         is_var_to_plot = false;
     end
     
@@ -442,6 +410,8 @@ for var_num = 2:size(SMID, 2)
             
             current_sample = sample_names(sample_num);
             
+            samp_col = col_mat(sample_num, :);
+            
             % Get the first column of data (which contains the stimulus names)
             samp_stim = S.(char(current_sample)).data{1};
             
@@ -453,13 +423,12 @@ for var_num = 2:size(SMID, 2)
             var_values = S.(char(current_sample)).data{var_ind};
             
             % Add density plot for current sample
-            ksdensity(var_values);
             [f,xi] = ksdensity(var_values);
-            h = [h, plot(xi, f, 'color', col_mat(sample_num, :))];
+            h = [h, plot(xi, f, 'color', samp_col)];
             
             hold all;
             
-        end
+        end % for sample_num
         
         % Add figure axis labels and legend
         xlabel(strrep(current_var, '_', ' '));
@@ -472,6 +441,6 @@ for var_num = 2:size(SMID, 2)
         saveas(gcf, char(strcat(DIRS.out, 'plots/fig/', current_var)), 'fig');
         saveas(gcf, char(strcat(DIRS.out, 'plots/jpg/', current_var)), 'jpg');
         
-    end
+    end % if is var to plot
     
 end
